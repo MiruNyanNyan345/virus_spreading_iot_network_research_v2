@@ -1,6 +1,5 @@
 import numpy as np
 import networkx as nx
-import plot_parallel_betweenness as p_between
 import time
 
 

@@ -6,8 +6,10 @@ import time
 import copy
 import logging
 import os
+import argparse
 import datetime
 
+import utils
 import node
 import network
 import measurement as measure
@@ -405,75 +407,156 @@ def demo(nk, simulation_limit, buffer_limit, auth_nodes, network_type, experimen
 
 
 def main():
-    # get the experiment starting time
-    current_time = int(time.time())
+    parser = argparse.ArgumentParser(description="Simulation Program")
+    parser.add_argument("--experiment_name", required=True, type=str)
+    parser.add_argument("--graph_config", required=True, nargs='+')
+    parser.add_argument("--experiment_times", required=True, type=int)
+    parser.add_argument("--authenticated_nodes_percentage", required=True, type=float)
+    parser.add_argument("--simulation_limit", required=True, type=float)
+    # args.add_argument("graph_type", required=True)
+    args = parser.parse_args()
+
     # set the experiment name and it will be the folder name of the results' and plots' folder
-    experiment_name = "LI_BA_15_auth_nodes_{}".format(current_time)
-    plots_folder = "plots_{}".format(experiment_name)
-    result_datasets_folder = "result_datasets_{}".format(experiment_name)
+    # experiment_name = "LI_BA_15_auth_nodes_{}".format(current_time)
+    experiment_name = args.experiment_name
+
+    graph_config = args.graph_config
+    # Checking whether the configuration of the target simulation graph is correct
+    correct_g_config, g_config_result = utils.check_args_graph_config(graph_config)
+    graph_config_dict = None
+    if not correct_g_config:
+        parser.error(g_config_result)
+    else:
+        graph_config_dict = g_config_result
+
+    # Experiment Times
+    experiments = args.experiment_times
+
+    # get the experiment starting time
+    # current_time = int(time.time())
+    current_time = datetime.date.today().strftime("%Y%m%d")
+
+    # percentage of how many nodes are authenticated
+    n_auth = args.authenticated_nodes_percentage
+
+    # the threshold of remaining nodes to stop the simulation
+    simulation_limit = args.simulation_limit
+
+    plots_folder = f"{experiment_name}_plots_{current_time}"
+    result_datasets_folder = f"{experiment_name}_result_datasets_{current_time}"
     if not os.path.exists(plots_folder):
         os.makedirs(plots_folder)
     if not os.path.exists(result_datasets_folder):
         os.makedirs(result_datasets_folder)
 
     # initial the log file
-    logging.basicConfig(filename="experiments_{}.log".format(experiment_name), level=logging.INFO)
+    # logging.basicConfig(filename="experiments_{}.log".format(experiment_name), level=logging.INFO)
+    logging.basicConfig(filename=f"{experiment_name}_experiments_{current_time}.log", level=logging.INFO)
+
+    for i in range(experiments):
+        logging.info(f"Experiment {i} started.")
+        # Graph Type
+        g = graph_config_dict["g"]
+        # Initialized Network
+        experiment_nk = None
+        # Authenticated selected from Initialized Network
+        experiment_auth_nodes = None
+
+        if g == "barabasi_albert":
+            # Number of network nodes
+            n = graph_config_dict["n"]
+            # Number of network edges
+            m = graph_config_dict["m"]
+            experiment_nk, experiment_auth_nodes = network.init_ba_network(n=n, m=m, nauth=n_auth, experiments=i,
+                                                                           folder_path=plots_folder)
+        elif g == "powerlaw_cluster":
+            # Number of network nodes
+            n = graph_config_dict["n"]
+            # Number of network edges
+            m = graph_config_dict["m"]
+            # Probability of adding a triangle after adding a random edge
+            p = graph_config_dict["p"]
+            experiment_nk, experiment_auth_nodes = network.init_power_law_cluster_graph(n=n, m=m, p=p,
+                                                                                        nauth=n_auth, experiments=i,
+                                                                                        folder_path=plots_folder)
+        elif g == "dual_barabasi_albert":
+            # Number of nodes
+            n = graph_config_dict["n"]
+            # Number of edges to attach from a new node to existing nodes with probability 𝑝
+            m1 = graph_config_dict["m1"]
+            #  Number of edges to attach from a new node to existing nodes with probability 1−𝑝
+            m2 = graph_config_dict["m2"]
+            # The probability of attaching 𝑚1 edges (as opposed to 𝑚2 edges)
+            p = graph_config_dict["p"]
+            experiment_nk, experiment_auth_nodes = network.init_dual_barabasi_albert_graph(n=n, m1=m1, m2=m2, p=p,
+                                                                                           nauth=n_auth, experiments=i,
+                                                                                           folder_path=plots_folder)
+
+        nk_type = graph_config_dict["g"]
+        sim_start_time = time.time()
+        demo(nk=experiment_nk, simulation_limit=simulation_limit, buffer_limit=5, auth_nodes=experiment_auth_nodes,
+             network_type=nk_type, experiments=i,
+             num_of_nodes=n, edges=m,
+             result_folder_path=result_datasets_folder, plots_folder_path=plots_folder)
+        sim_end_time = time.time()
+        logging.info(f"Experiment {i} Running Time: {sim_end_time - sim_start_time}")
+        logging.info(f"Experiment {i} ended. \n")
 
     # experiment times
-    experiments = 10
+    # experiments = 10
     # a list of percentage of how many nodes are authenticated
     # list(reversed(range(11)))
-    n_auth = [15]
+    # n_auth = [15]
 
     # the simulation limit to stop the simulation
-    simulation_limit = 20
+    # simulation_limit = 20
 
-    for a in n_auth:
-        for i in range(experiments):
-            logging.info("Experiment {} started.".format(i))
-            # ba network - number of nodes
-            ba_n = 1000
-            # ba network - number of edges to attach from a new node to existing nodes
-            ba_m = 3
-
-            # power law cluster -  the number of nodes
-            power_law_cluster_n = 100
-            # power law cluster - the number of random edges to add for each new node
-            power_law_cluster_m = 2
-            # power law cluster - Probability of adding a triangle after adding a random edge
-            power_law_cluster_p = 0.5
-
-            # network_type = ["BA", "PowerLaw"]
-            network_type = ["BA"]
-
-            network_list = [
-                network.init_ba_network(n=ba_n,
-                                        m=ba_m,
-                                        nauth=a,
-                                        experiments=i,
-                                        folder_path=plots_folder),
-
-                # network.init_power_law_cluster_graph(n=power_law_cluster_n,
-                #                                      m=power_law_cluster_m,
-                #                                      p=power_law_cluster_p,
-                #                                      nauth=a,
-                #                                      experiments=i,
-                #                                      folder_path=plots_folder)
-            ]
-
-            for nk, auth_nodes in network_list:
-                nk_type = network_type.pop(0)
-                start = time.time()
-                demo(nk=nk, simulation_limit=simulation_limit, buffer_limit=5, auth_nodes=auth_nodes,
-                     network_type=nk_type, experiments=i,
-                     num_of_nodes=ba_n, edges=ba_m,
-                     result_folder_path=result_datasets_folder, plots_folder_path=plots_folder)
-                end = time.time()
-                logging.info("The running time is {} .".format(end - start))
-                print("The running time is {} .".format(end - start))
-                print("")
-
-            logging.info("{} experiment ended.\n".format(i))
+    # for a in n_auth:
+    #     for i in range(experiments):
+    #         logging.info("Experiment {} started.".format(i))
+    #         # ba network - number of nodes
+    #         ba_n = 1000
+    #         # ba network - number of edges to attach from a new node to existing nodes
+    #         ba_m = 3
+    #
+    #         # power law cluster -  the number of nodes
+    #         power_law_cluster_n = 100
+    #         # power law cluster - the number of random edges to add for each new node
+    #         power_law_cluster_m = 2
+    #         # power law cluster - Probability of adding a triangle after adding a random edge
+    #         power_law_cluster_p = 0.5
+    #
+    #         # network_type = ["BA", "PowerLaw"]
+    #         network_type = ["BA"]
+    #
+    #         network_list = [
+    #             network.init_ba_network(n=ba_n,
+    #                                     m=ba_m,
+    #                                     nauth=a,
+    #                                     experiments=i,
+    #                                     folder_path=plots_folder),
+    #
+    #             # network.init_power_law_cluster_graph(n=power_law_cluster_n,
+    #             #                                      m=power_law_cluster_m,
+    #             #                                      p=power_law_cluster_p,
+    #             #                                      nauth=a,
+    #             #                                      experiments=i,
+    #             #                                      folder_path=plots_folder)
+    #         ]
+    #
+    #         for nk, auth_nodes in network_list:
+    #             nk_type = network_type.pop(0)
+    #             start = time.time()
+    #             demo(nk=nk, simulation_limit=simulation_limit, buffer_limit=5, auth_nodes=auth_nodes,
+    #                  network_type=nk_type, experiments=i,
+    #                  num_of_nodes=ba_n, edges=ba_m,
+    #                  result_folder_path=result_datasets_folder, plots_folder_path=plots_folder)
+    #             end = time.time()
+    #             logging.info("The running time is {} .".format(end - start))
+    #             print("The running time is {} .".format(end - start))
+    #             print("")
+    #
+    #         logging.info("{} experiment ended.\n".format(i))
 
 
 # Press the green button in the gutter to run the script.
