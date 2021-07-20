@@ -19,6 +19,7 @@
                              --number_of_auth @number of authenticated node in the target simulation (int)
                              --plot_results @do u want to plot the result? (bool)
 
+**@xxx <-- Change it to the value that you would like to use**
 
 ## Prerequisite
 * Python 3.6
